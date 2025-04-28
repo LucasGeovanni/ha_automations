@@ -1,181 +1,48 @@
 blueprint:
-  name: Zigbee Button Toggle Lights (via MQTT)
+  name: Sincronizar Switches ou Luzes (Sem Loop)
   description: >
-    Alterna o estado de luzes individuais ou grupos usando eventos MQTT recebidos de um botão Zigbee, como Tuya TS0041 ou Aqara.
-    Suporta:
-    - single click (1 luz)
-    - double click (grupo de luzes)
-    - hold (grupo expandido)
-
-    Parâmetros:
-    - Tópico MQTT do botão (ex: zigbee2mqtt/Botao cozinha/action)
-    - Tópico MQTT para controlar os dispositivos (ex: zigbee2mqtt/Interruptor Cozinha/set)
-    - Sensores de estado para L1, L2, L4
+    Sincroniza múltiplos switches ou lights no Home Assistant sem loops. Quando um for alterado, todos os outros são atualizados para o mesmo estado (on ou off).
   domain: automation
   input:
-    button_mqtt_topic:
-      name: Botão MQTT Topic
-      description: Tópico MQTT que publica os cliques
-      selector:
-        text:
-    mqtt_publish_topic:
-      name: Tópico de Controle MQTT
-      description: Tópico MQTT que controla os dispositivos
-      selector:
-        text:
-    entity_l1:
-      name: Entidade L1
-      description: Entidade que representa a luz principal (L1)
+    switches:
+      name: Entidades a sincronizar
+      description: Selecione os switches ou lights que deseja manter sincronizados.
       selector:
         entity:
-    entity_l2:
-      name: Entidade L2
-      description: Entidade que representa a segunda luz (L2)
-      selector:
-        entity:
-    entity_l4:
-      name: Entidade L4
-      description: Entidade que representa a quarta luz (L4)
-      selector:
-        entity:
+          domain:
+            - switch
+            - light
+          multiple: true
 
 trigger:
-  - platform: mqtt
-    topic: !input button_mqtt_topic
+  - platform: state
+    entity_id: !input switches
+    to: "on"
+  - platform: state
+    entity_id: !input switches
+    to: "off"
 
-condition: []
+condition:
+  - condition: template
+    value_template: >
+      {% set other = expand(!input switches)
+                     | rejectattr('entity_id', 'equalto', trigger.entity_id)
+                     | list %}
+      {% if trigger.to_state.state in ['on', 'off'] %}
+        {{ other | selectattr('state', 'ne', trigger.to_state.state) | list | count > 0 }}
+      {% else %}
+        false
+      {% endif %}
 
 action:
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ trigger.payload == 'single' }}"
-        sequence:
-          - choose:
-              - conditions:
-                  - condition: state
-                    entity_id: !input entity_l1
-                    state: "ON"
-                sequence:
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l1":"OFF"}'
-              - conditions:
-                  - condition: state
-                    entity_id: !input entity_l1
-                    state: "OFF"
-                sequence:
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l1":"ON"}'
-      - conditions:
-          - condition: template
-            value_template: "{{ trigger.payload == 'hold' }}"
-        sequence:
-          - choose:
-              - conditions:
-                  - condition: or
-                    conditions:
-                      - condition: state
-                        entity_id: !input entity_l1
-                        state: "ON"
-                      - condition: state
-                        entity_id: !input entity_l2
-                        state: "ON"
-                      - condition: state
-                        entity_id: !input entity_l4
-                        state: "ON"
-                sequence:
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l1":"OFF"}'
-                  - delay:
-                      milliseconds: 300
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l2":"OFF"}'
-                  - delay:
-                      milliseconds: 300
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l4":"OFF"}'
-              - conditions:
-                  - condition: and
-                    conditions:
-                      - condition: state
-                        entity_id: !input entity_l1
-                        state: "OFF"
-                      - condition: state
-                        entity_id: !input entity_l2
-                        state: "OFF"
-                      - condition: state
-                        entity_id: !input entity_l4
-                        state: "OFF"
-                sequence:
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l1":"ON"}'
-                  - delay:
-                      milliseconds: 300
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l2":"ON"}'
-                  - delay:
-                      milliseconds: 300
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l4":"ON"}'
-      - conditions:
-          - condition: template
-            value_template: "{{ trigger.payload == 'double' }}"
-        sequence:
-          - choose:
-              - conditions:
-                  - condition: or
-                    conditions:
-                      - condition: state
-                        entity_id: !input entity_l2
-                        state: "ON"
-                      - condition: state
-                        entity_id: !input entity_l4
-                        state: "ON"
-                sequence:
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l2":"OFF"}'
-                  - delay:
-                      milliseconds: 300
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l4":"OFF"}'
-              - conditions:
-                  - condition: and
-                    conditions:
-                      - condition: state
-                        entity_id: !input entity_l2
-                        state: "OFF"
-                      - condition: state
-                        entity_id: !input entity_l4
-                        state: "OFF"
-                sequence:
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l2":"ON"}'
-                  - delay:
-                      milliseconds: 300
-                  - service: mqtt.publish
-                    data:
-                      topic: !input mqtt_publish_topic
-                      payload: '{"state_l4":"ON"}'
-mode: single
+  - service: >
+      {% if trigger.to_state.state == 'on' %}
+        homeassistant.turn_on
+      {% else %}
+        homeassistant.turn_off
+      {% endif %}
+    target:
+      entity_id: !input switches
+
+mode: queued
+max: 5
