@@ -22,15 +22,10 @@ trigger:
     entity_id: !input switches
     to: "off"
 
-variables:
-  switches_list: !input switches
-
 condition:
   - condition: template
     value_template: >
-      {% set other = expand(switches_list)
-                     | rejectattr('entity_id', 'equalto', trigger.entity_id)
-                     | list %}
+      {% set other = expand(trigger.entity_id, expand(!input switches) | map(attribute='entity_id') | reject('equalto', trigger.entity_id) | list) %}
       {% if trigger.to_state.state in ['on', 'off'] %}
         {{ other | selectattr('state', 'ne', trigger.to_state.state) | list | count > 0 }}
       {% else %}
