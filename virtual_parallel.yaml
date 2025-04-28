@@ -1,0 +1,183 @@
+blueprint:
+  name: Zigbee Button Toggle Lights (via MQTT)
+  description: |
+    Alterna o estado de luzes individuais ou grupos usando eventos MQTT recebidos de um botão Zigbee (ex: Tuya TS0041, Aqara).
+    Suporta: single click (1 luz), double click (grupo), hold (grupo expandido).
+
+    Crie uma automação a partir deste blueprint informando:
+    - Qual o tópico MQTT do botão
+    - Quais sensores estão relacionados
+    - Qual o tópico de publicação MQTT para enviar os comandos
+  domain: automation
+  input:
+    button_mqtt_topic:
+      name: Botão MQTT Topic
+      description: Tópico MQTT que publica os cliques (ex: zigbee2mqtt/Botao cozinha/action)
+      selector:
+        text:
+    mqtt_publish_topic:
+      name: Tópico de Controle MQTT
+      description: Tópico MQTT que controla os dispositivos (ex: zigbee2mqtt/Interruptor Cozinha/set)
+      selector:
+        text:
+    entity_l1:
+      name: Entidade L1
+      description: Entidade do sensor que representa a primeira luz (ex: sensor.estado_l1)
+      selector:
+        entity:
+    entity_l2:
+      name: Entidade L2
+      description: Entidade do sensor que representa a segunda luz (ex: sensor.estado_l2)
+      selector:
+        entity:
+    entity_l4:
+      name: Entidade L4
+      description: Entidade do sensor que representa a quarta luz (ex: sensor.estado_l4)
+      selector:
+        entity:
+
+trigger:
+  - platform: mqtt
+    topic: !input button_mqtt_topic
+
+condition: []
+
+action:
+  - choose:
+      # 1x Clique - toggle L1
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload == 'single' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: state
+                    entity_id: !input entity_l1
+                    state: "ON"
+                sequence:
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l1":"OFF"}'
+              - conditions:
+                  - condition: state
+                    entity_id: !input entity_l1
+                    state: "OFF"
+                sequence:
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l1":"ON"}'
+
+      # Hold - toggle L1 + L2 + L4
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload == 'hold' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity_id: !input entity_l1
+                        state: "ON"
+                      - condition: state
+                        entity_id: !input entity_l2
+                        state: "ON"
+                      - condition: state
+                        entity_id: !input entity_l4
+                        state: "ON"
+                sequence:
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l1":"OFF"}'
+                  - delay:
+                      milliseconds: 300
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l2":"OFF"}'
+                  - delay:
+                      milliseconds: 300
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l4":"OFF"}'
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - condition: state
+                        entity_id: !input entity_l1
+                        state: "OFF"
+                      - condition: state
+                        entity_id: !input entity_l2
+                        state: "OFF"
+                      - condition: state
+                        entity_id: !input entity_l4
+                        state: "OFF"
+                sequence:
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l1":"ON"}'
+                  - delay:
+                      milliseconds: 300
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l2":"ON"}'
+                  - delay:
+                      milliseconds: 300
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l4":"ON"}'
+
+      # 2x Clique - toggle L2 + L4
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload == 'double' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity_id: !input entity_l2
+                        state: "ON"
+                      - condition: state
+                        entity_id: !input entity_l4
+                        state: "ON"
+                sequence:
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l2":"OFF"}'
+                  - delay:
+                      milliseconds: 300
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l4":"OFF"}'
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - condition: state
+                        entity_id: !input entity_l2
+                        state: "OFF"
+                      - condition: state
+                        entity_id: !input entity_l4
+                        state: "OFF"
+                sequence:
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l2":"ON"}'
+                  - delay:
+                      milliseconds: 300
+                  - service: mqtt.publish
+                    data:
+                      topic: !input mqtt_publish_topic
+                      payload: '{"state_l4":"ON"}'
+mode: single
